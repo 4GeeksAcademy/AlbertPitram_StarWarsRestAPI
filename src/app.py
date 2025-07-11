@@ -1,51 +1,85 @@
-"""
-This module takes care of starting the API Server, Loading the DB and Adding the endpoints
-"""
+from flask import Flask, jsonify, request
 import os
-from flask import Flask, request, jsonify, url_for
-from flask_migrate import Migrate
-from flask_swagger import swagger
-from flask_cors import CORS
-from utils import APIException, generate_sitemap
-from admin import setup_admin
-from models import db, User
-#from models import Person
 
 app = Flask(__name__)
-app.url_map.strict_slashes = False
 
-db_url = os.getenv("DATABASE_URL")
-if db_url is not None:
-    app.config['SQLALCHEMY_DATABASE_URI'] = db_url.replace("postgres://", "postgresql://")
-else:
-    app.config['SQLALCHEMY_DATABASE_URI'] = "sqlite:////tmp/test.db"
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# Dades simulades a memòria
+people = [
+    { "id": 1, "name": "Luke Skywalker" },
+    { "id": 2, "name": "Leia Organa" }
+]
 
-MIGRATE = Migrate(app, db)
-db.init_app(app)
-CORS(app)
-setup_admin(app)
+planets = [
+    { "id": 1, "name": "Tatooine" },
+    { "id": 2, "name": "Alderaan" }
+]
 
-# Handle/serialize errors like a JSON object
-@app.errorhandler(APIException)
-def handle_invalid_usage(error):
-    return jsonify(error.to_dict()), error.status_code
+users = [
+    { "id": 1, "username": "anakin" }
+]
 
-# generate sitemap with all your endpoints
-@app.route('/')
-def sitemap():
-    return generate_sitemap(app)
+favorites = []  # [{ user_id: 1, type: "planet"/"people", id: 2 }]
 
-@app.route('/user', methods=['GET'])
-def handle_hello():
 
-    response_body = {
-        "msg": "Hello, this is your GET /user response "
-    }
+# ---------- PEOPLE ----------
+@app.route("/people", methods=["GET"])
+def get_people():
+    return jsonify(people)
 
-    return jsonify(response_body), 200
+@app.route("/people/<int:people_id>", methods=["GET"])
+def get_one_person(people_id):
+    person = next((p for p in people if p["id"] == people_id), None)
+    if person:
+        return jsonify(person)
+    return jsonify({"error": "Person not found"}), 404
 
-# this only runs if `$ python src/app.py` is executed
+
+# ---------- PLANETS ----------
+@app.route("/planets", methods=["GET"])
+def get_planets():
+    return jsonify(planets)
+
+@app.route("/planets/<int:planet_id>", methods=["GET"])
+def get_one_planet(planet_id):
+    planet = next((p for p in planets if p["id"] == planet_id), None)
+    if planet:
+        return jsonify(planet)
+    return jsonify({"error": "Planet not found"}), 404
+
+
+# ---------- USERS ----------
+@app.route("/users", methods=["GET"])
+def get_users():
+    return jsonify(users)
+
+@app.route("/users/favorites", methods=["GET"])
+def get_user_favorites():
+    user_favs = [f for f in favorites if f["user_id"] == 1]
+    return jsonify(user_favs)
+
+
+# ---------- FAVORITES ----------
+@app.route("/favorite/planet/<int:planet_id>", methods=["POST"])
+def add_fav_planet(planet_id):
+    favorites.append({ "user_id": 1, "type": "planet", "id": planet_id })
+    return jsonify(favorites)
+
+@app.route("/favorite/people/<int:people_id>", methods=["POST"])
+def add_fav_people(people_id):
+    favorites.append({ "user_id": 1, "type": "people", "id": people_id })
+    return jsonify(favorites)
+
+@app.route("/favorite/planet/<int:planet_id>", methods=["DELETE"])
+def delete_fav_planet(planet_id):
+    global favorites
+    favorites = [f for f in favorites if not (f["user_id"] == 1 and f["type"] == "planet" and f["id"] == planet_id)]
+    return jsonify(favorites)
+
+@app.route("/favorite/people/<int:people_id>", methods=["DELETE"])
+def delete_fav_people(people_id):
+    global favorites
+    favorites = [f for f in favorites if not (f["user_id"] == 1 and f["type"] == "people" and f["id"] == people_id)]
+    return jsonify(favorites)
 if __name__ == '__main__':
     PORT = int(os.environ.get('PORT', 3000))
     app.run(host='0.0.0.0', port=PORT, debug=False)
